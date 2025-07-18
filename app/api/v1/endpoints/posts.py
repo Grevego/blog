@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user_by_id, verify_post_ownership
+from app.dependencies import get_current_user, verify_post_ownership
 from app.models.user import User
 from app.schemas.post import PostCreate, PostUpdate, PostResponse, PostListResponse
 from app.schemas.base import PaginationParams, PaginatedResponse
@@ -147,14 +147,16 @@ def get_post_by_slug(
 def create_post(
     post_in: PostCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_by_id)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new blog post.
     
-    Requires authentication via user_id query parameter.
+    Requires JWT authentication via Authorization header.
     
-    Example: POST /api/v1/posts/?user_id=your-user-uuid-here
+    Example: 
+    Authorization: Bearer <your-jwt-token>
+    POST /api/v1/posts/
     """
     return post_service.create_post(db, post_in, UUID(str(current_user.id)))
 

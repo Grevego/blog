@@ -4,58 +4,69 @@ Authentication and authorization dependencies.
 
 from typing import Optional
 from uuid import UUID
-from fastapi import Depends, HTTPException, status, Query, Header
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.services.user_service import user_service
+from app.services.auth_service import auth_service
+
+# HTTP Bearer token scheme for JWT authentication
+security = HTTPBearer()
 
 
-def get_current_user_by_id(
-    user_id: UUID = Query(..., description="User ID for authentication (testing only)"),
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Get current user by user_id query parameter.
+    Get current user from JWT token in Authorization header.
     
-    This is a simple authentication method for testing purposes.
-    In production, you would validate JWT tokens or session cookies.
+    Expects: Authorization: Bearer <jwt-token>
     """
-    user = user_service.get(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     
-    if not bool(user.is_active):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
-        )
-    
-    return user
+    try:
+        user = auth_service.get_current_user_from_token(db, credentials.credentials)
+        if user is None:
+            raise credentials_exception
+        
+        if not bool(user.is_active):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user"
+            )
+        
+        return user
+    except Exception:
+        raise credentials_exception
 
 
 def get_current_user_optional(
-    user_id: Optional[UUID] = Query(None, description="Optional user ID for authentication"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
     db: Session = Depends(get_db)
 ) -> Optional[User]:
     """
     Get current user optionally (for endpoints that work with or without auth).
     """
-    if not user_id:
+    if not credentials:
         return None
     
     try:
-        return get_current_user_by_id(user_id, db)
+        return get_current_user(credentials, db)
     except HTTPException:
         return None
 
 
 def get_current_superuser(
-    current_user: User = Depends(get_current_user_by_id)
+    current_user: User = Depends(get_current_user)
 ) -> User:
     """
     Require current user to be a superuser.
@@ -70,7 +81,7 @@ def get_current_superuser(
 
 def verify_post_ownership(
     post_id: UUID,
-    current_user: User = Depends(get_current_user_by_id),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> User:
     """
