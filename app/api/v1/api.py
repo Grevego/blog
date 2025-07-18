@@ -1,11 +1,17 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import posts, categories, users
+from app.api.v1.endpoints import auth, posts, categories, users
 
 # Create main API router for v1
 api_router = APIRouter()
 
 # Include all endpoint routers
+api_router.include_router(
+    auth.router, 
+    prefix="/auth", 
+    tags=["authentication"]
+)
+
 api_router.include_router(
     posts.router, 
     prefix="/posts", 
@@ -43,6 +49,7 @@ def api_info():
         "version": "1.0.0",
         "description": "A modern blog API built with FastAPI",
         "endpoints": {
+            "auth": "/api/v1/auth",
             "posts": "/api/v1/posts",
             "categories": "/api/v1/categories", 
             "users": "/api/v1/users",
